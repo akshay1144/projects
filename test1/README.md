@@ -19,4 +19,4 @@ Run the script to see full dashboard
 
 ## Command to run
 
- ./monitor.sh
+ ./system_monitor.sh
