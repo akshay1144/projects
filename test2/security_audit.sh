@@ -1,133 +1,124 @@
 #!/bin/bash
 
-# Security Audit and Server Hardening Script
-
-################################################
-
-# Written By Akshay On 24-08-2024  #
-
-
-################################################
-
-audit_users_groups() {
-    echo "### User and Group Audits ###"
-    echo "Listing all users and groups..."
-    awk -F':' '{ print $1 }' /etc/passwd
-    awk -F':' '{ print $1 }' /etc/group
-
-    echo "Checking for users with UID 0 (root privileges)..."
-    awk -F':' '($3 == 0) { print $1 }' /etc/passwd
-
-    echo "Checking for users without passwords or with weak passwords..."
-    awk -F':' '($2 == "" || $2 == "*") { print $1 }' /etc/shadow
+function user_group_audit {
+  echo "User and Group Audits:"
+  echo "Users with UID 0 (root):"
+  awk -F: '$3 == 0 {print $1}' /etc/passwd
+  echo "Group IDs:"
+  awk -F: '{print $1 ": " $3}' /etc/group
 }
 
-audit_file_permissions() {
-    echo "### File and Directory Permissions ###"
-    echo "Scanning for world-writable files and directories..."
-    find / -perm -0002 -type d -print
-
-    echo "Checking .ssh directory permissions..."
-    find /home -name ".ssh" -exec ls -ld {} \;
-
-    echo "Reporting files with SUID/SGID bits set..."
-    find / -perm /6000 -type f -exec ls -ld {} \;
+function file_permissions {
+  echo "File and Directory Permissions:"
+  echo "SUID/SGID executables:"
+  find / -perm /6000 -type f 2>/dev/null
 }
 
-audit_services() {
-    echo "### Service Audits ###"
-    echo "Listing all running services..."
-    systemctl list-units --type=service --state=running
-
-    echo "Checking critical services (sshd, iptables)..."
-    systemctl is-active sshd iptables
-
-    echo "Checking for services listening on non-standard or insecure ports..."
-    ss -tuln
+function service_audit {
+  echo "Service Audits:"
+  for service in sshd nginx apache2; do
+    echo "$service status: $(systemctl is-active $service)"
+  done
 }
 
-audit_firewall_network() {
-    echo "### Firewall and Network Security ###"
-    echo "Verifying firewall status and configuration..."
-    ufw status verbose
-
-    echo "Reporting open ports and associated services..."
-    ss -tuln
-
-    echo "Checking for IP forwarding..."
-    sysctl net.ipv4.ip_forward
+function firewall_network_security {
+  echo "Firewall and Network Security:"
+  echo "Current iptables rules:"
+  iptables -L -v -n
 }
 
-audit_ip_config() {
-    echo "### IP and Network Configuration Checks ###"
-    echo "Identifying public vs. private IP addresses..."
-    ip -o -4 addr list | awk '{print $2, $4}'
-
-    echo "Checking if sensitive services are exposed on public IPs..."
-    ss -tuln | grep ':22'
+function ip_network_config {
+  echo "IP and Network Configuration Checks:"
+  echo "Network interfaces and IP addresses:"
+  ip a
+  echo "Routing table:"
+  ip r
 }
 
-audit_security_updates() {
-    echo "### Security Updates and Patching ###"
-    echo "Checking for available security updates..."
-    apt-get update && apt-get upgrade --dry-run
-
-    echo "Ensuring automatic updates are configured..."
-    grep -r 'APT::Periodic::Unattended-Upgrade' /etc/apt/apt.conf.d/
+function security_updates {
+  echo "Security Updates and Patching:"
+  echo "Available updates:"
+  apt list --upgradable 2>/dev/null
 }
 
-audit_log_monitoring() {
-    echo "### Log Monitoring ###"
-    echo "Checking for suspicious log entries..."
-    grep "Failed password" /var/log/auth.log | tail -n 10
+function log_monitoring {
+  echo "Log Monitoring:"
+  echo "Last 10 entries in auth.log:"
+  tail -n 10 /var/log/auth.log
 }
 
-hardening_steps() {
-    echo "### Server Hardening Steps ###"
-    echo "Configuring SSH..."
-    sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
-    systemctl restart sshd
-
-    echo "Disabling IPv6..."
-    sysctl -w net.ipv6.conf.all.disable_ipv6=1
-    sysctl -w net.ipv6.conf.default.disable_ipv6=1
-
-    echo "Securing the bootloader..."
-    echo "GRUB_CMDLINE_LINUX=\"\""
-    update-grub
-
-    echo "Configuring the firewall..."
-    ufw default deny incoming
-    ufw allow ssh
-    ufw enable
-
-    echo "Setting up automatic security updates..."
-    apt-get install unattended-upgrades
-    dpkg-reconfigure --priority=low unattended-upgrades
+function server_hardening {
+  echo "Server Hardening Steps:"
+  echo "Checking for unnecessary services:"
+  systemctl list-unit-files | grep enabled
 }
 
-custom_security_checks() {
-    echo "### Custom Security Checks ###"
-    # Add custom checks here
+function custom_security_checks {
+  echo "Custom Security Checks:"
+  # Add any custom security checks here
+  echo "Custom checks are not defined."
 }
 
-generate_report() {
-    echo "Generating security audit and hardening report..."
-    {
-        audit_users_groups
-        audit_file_permissions
-        audit_services
-        audit_firewall_network
-        audit_ip_config
-        audit_security_updates
-        audit_log_monitoring
-        hardening_steps
-    } > /var/log/security_audit_report.txt
-
-    echo "Report saved to /var/log/security_audit_report.txt"
-    # Send report via email (requires mailutils)
-    # mail -s "Security Audit Report" admin@example.com < /var/log/security_audit_report.txt
+function report_dashboard {
+  clear
+  echo "Security Audit and Hardening Dashboard - $(date)"
+  echo "========================================"
+  user_group_audit
+  echo "========================================"
+  file_permissions
+  echo "========================================"
+  service_audit
+  echo "========================================"
+  firewall_network_security
+  echo "========================================"
+  ip_network_config
+  echo "========================================"
+  security_updates
+  echo "========================================"
+  log_monitoring
+  echo "========================================"
+  server_hardening
+  echo "========================================"
+  custom_security_checks
+  echo "========================================"
 }
 
-generate_report
-custom_security_checks
+function refresh_dashboard {
+  while true; do
+    report_dashboard
+    sleep 10
+  done
+}
+
+while getopts ":u:f:s:f:i:p:l:h:c:r" opt; do
+  case ${opt} in
+    u ) user_group_audit
+      ;;
+    f ) file_permissions
+      ;;
+    s ) service_audit
+      ;;
+    f ) firewall_network_security
+      ;;
+    i ) ip_network_config
+      ;;
+    p ) security_updates
+      ;;
+    l ) log_monitoring
+      ;;
+    h ) server_hardening
+      ;;
+    c ) custom_security_checks
+      ;;
+    r ) refresh_dashboard
+      ;;
+    h ) echo "Usage: $0 [-u (user/group audit)] [-f (file permissions)] [-s (service audit)] [-f (firewall)] [-i (IP/network config)] [-p (security updates)] [-l (log monitoring)] [-h (server hardening)] [-c (custom checks)] [-r (dashboard)]"
+      ;;
+    \? ) echo "Invalid option: -$OPTARG" 1>&2
+      ;;
+  esac
+done
+
+if [ $# -eq 0 ]; then
+  refresh_dashboard
+fi
